@@ -37,6 +37,15 @@ import { fields, linkedFields } from './fields';
 import { ALLOWED_FORMATS } from './constants';
 import { getDisplayValue } from './display';
 
+const getUrlApiSlugPluginData = slug => `https://api.wordpress.org/plugins/info/1.0/${ slug }.json?fields=active_installs`
+
+const fetchSlugData = async ( slug ) => {
+	const response = await fetch( getUrlApiSlugPluginData(slug) )
+	if ( ! response.ok ) throw new Error( 'An error occurred fetching plugin data.' );
+	const jsonData = await response.json();
+	return [{[slug] : jsonData }];
+}
+
 /**
  * The edit function describes the structure of your block in the context of the
  * editor. This represents what the editor will render when the block is used.
@@ -72,25 +81,18 @@ export default function Edit( props ) {
 
 	useEffect( () => {
 		// No plugin slugs to fetch, bail early.
-		if ( slugs.length === 0 ) {
-			return;
-		}
+		if ( slugs.length === 0 ) return;
 
 		const fetchDataForPluginSlugs = async () => {
+
 			try {
-				const pluginDataObject = {};
-				for ( const slug of slugs ) {
-					const response = await fetch(
-						`https://api.wordpress.org/plugins/info/1.0/${ slug }.json?fields=active_installs`
-					);
-					if ( ! response.ok ) {
-						throw new Error(
-							'An error occurred fetching plugin data.'
-						);
-					}
-					const jsonData = await response.json();
-					pluginDataObject[ slug ] = jsonData;
-				}
+				const fetchPromises = slugs.map(slug => fetchSlugData(slug));
+				const responses = await Promise.all(fetchPromises);
+				const pluginDataObject = responses.reduce((acc, slugWithResponse) => {
+					const [slug, response] = Object.entries(slugWithResponse)[0];
+					acc[slug] = response;
+					return acc;
+				}, {});
 				setPluginData( pluginDataObject );
 			} catch ( fetchError ) {
 				setError( fetchError.message );
